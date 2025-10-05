@@ -1,0 +1,13 @@
+setting,value
+target_weight,50.0
+target_bf,20.0
+target_skeletal,32.0
+target_fatmass,13.0
+draw_6m,True
+draw_12m,True
+ma_days,7
+period,直近60日
+y_min_weight,50.0
+y_min_bf,10.0
+y_min_skeletal,28.0
+fatmass_margin,2.0
