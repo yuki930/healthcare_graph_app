@@ -6,11 +6,34 @@ import matplotlib.pyplot as plt
 import streamlit as st
 from datetime import timedelta
 import pytz
+import matplotlib.font_manager as fm
 
-# 日本語フォントの優先候補（OSに入っているものから使われます）
-plt.rcParams['font.family'] = ['Noto Sans CJK JP', 'Noto Sans JP', 'Yu Gothic', 'Hiragino Sans', 'Meiryo', 'IPAexGothic']
-# マイナス記号の豆腐対策
-plt.rcParams['axes.unicode_minus'] = False
+# 日本語フォントの設定
+def setup_japanese_font():
+    """日本語フォントを設定する"""
+    # Streamlit Cloud用のフォントパス
+    font_paths = [
+        '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+        '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+    ]
+
+    # フォントファイルが存在するか確認
+    for font_path in font_paths:
+        try:
+            if fm.fontManager.addfont(font_path):
+                plt.rcParams['font.family'] = 'Noto Sans CJK JP'
+                break
+        except:
+            continue
+    else:
+        # フォールバック：システムにある日本語フォントを探す
+        plt.rcParams['font.family'] = ['Noto Sans CJK JP', 'Noto Sans JP', 'Yu Gothic', 'Hiragino Sans', 'Meiryo', 'IPAexGothic', 'sans-serif']
+
+    # マイナス記号の豆腐対策
+    plt.rcParams['axes.unicode_minus'] = False
+
+# フォント設定を実行
+setup_japanese_font()
 
 
 st.set_page_config(page_title="体組成グラフメーカー", layout="wide")
