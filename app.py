@@ -55,7 +55,9 @@ if "settings" not in st.session_state:
         "y_min_weight": 50.0,
         "y_min_bf": 15.0,
         "y_min_skeletal": 25.0,
-        "fatmass_margin": 2.0
+        "fatmass_margin": 2.0,
+        "hide_y_values": False,
+        "vertical_layout": False
     }
 if "settings_loaded" not in st.session_state:
     st.session_state.settings_loaded = False
@@ -113,6 +115,10 @@ with st.sidebar:
                 st.session_state["input_y_min_bf"] = st.session_state.settings["y_min_bf"]
                 st.session_state["input_y_min_skeletal"] = st.session_state.settings["y_min_skeletal"]
                 st.session_state["input_fatmass_margin"] = st.session_state.settings["fatmass_margin"]
+                if "hide_y_values" in st.session_state.settings:
+                    st.session_state["input_hide_y_values"] = st.session_state.settings["hide_y_values"]
+                if "vertical_layout" in st.session_state.settings:
+                    st.session_state["input_vertical_layout"] = st.session_state.settings["vertical_layout"]
                 st.session_state.settings_loaded = True
                 st.success("設定を読み込みました")
                 st.rerun()
@@ -161,6 +167,16 @@ with st.sidebar:
     y_min_skeletal = st.number_input("骨格筋率グラフの下限 (%)", value=st.session_state.settings["y_min_skeletal"], step=0.5, key="input_y_min_skeletal")
     fatmass_margin = st.number_input("体脂肪量グラフの余白 (kg)", value=st.session_state.settings["fatmass_margin"], step=0.5, key="input_fatmass_margin")
 
+    st.divider()
+    st.subheader("プライバシー設定")
+    hide_y_values = st.checkbox("Y軸の数値を非表示（傾向のみ表示）", value=st.session_state.settings["hide_y_values"], key="input_hide_y_values")
+    st.caption("チェックすると、グラフの具体的な数値が非表示になり、増減の傾向だけを共有できます")
+
+    st.divider()
+    st.subheader("グラフレイアウト")
+    vertical_layout = st.checkbox("縦長レイアウト（SNS映え）", value=st.session_state.settings["vertical_layout"], key="input_vertical_layout")
+    st.caption("チェックすると、グラフが縦長になりX（旧Twitter）などのSNSに最適化されます")
+
     # 設定を記憶
     st.session_state.settings.update({
         "target_weight": target_weight,
@@ -174,7 +190,9 @@ with st.sidebar:
         "y_min_weight": y_min_weight,
         "y_min_bf": y_min_bf,
         "y_min_skeletal": y_min_skeletal,
-        "fatmass_margin": fatmass_margin
+        "fatmass_margin": fatmass_margin,
+        "hide_y_values": hide_y_values,
+        "vertical_layout": vertical_layout
     })
 
     # 設定CSVのダウンロード
@@ -205,8 +223,10 @@ def weekly_ma(series: pd.Series, window_days: int) -> pd.Series:
 
 def plot_metric(df: pd.DataFrame, col: str, ylabel: str, target_value: float,
                 start_date, draw_6m: bool, draw_12m: bool, ma_days: int,
-                y_min=None, y_max=None, title: str = "", x_range_days=None):
-    fig, ax = plt.subplots(figsize=(9,5))
+                y_min=None, y_max=None, title: str = "", x_range_days=None, hide_y_values=False, vertical_layout=False):
+    # SNS映え用の縦長レイアウト or 通常の横長レイアウト
+    figsize = (7, 10) if vertical_layout else (9, 5)
+    fig, ax = plt.subplots(figsize=figsize)
 
     # 背景色を設定
     ax.set_facecolor('#f8f9fa')
@@ -226,8 +246,10 @@ def plot_metric(df: pd.DataFrame, col: str, ylabel: str, target_value: float,
     ax.plot(ma.index, ma.values, linewidth=3, color='#F18F01',
             alpha=0.9, label=f"{ma_days}日移動平均")
 
+    # 目標ラインの凡例表示を制御
+    target_label = "目標" if hide_y_values else f"目標 {target_value}{ylabel[-1]}"
     ax.axhline(target_value, linestyle="--", linewidth=2, color="#6C757D",
-               alpha=0.7, label=f"目標 {target_value}{ylabel[-1]}")
+               alpha=0.7, label=target_label)
 
     start_val = df.iloc[0][col]
     if draw_6m:
@@ -246,10 +268,15 @@ def plot_metric(df: pd.DataFrame, col: str, ylabel: str, target_value: float,
         ymax = y_max if y_max is not None else max(df[col].max(), (ma.max() if not ma.isna().all() else df[col].max()))
         ax.set_ylim(ymin, ymax)
 
-    # Y軸のメジャーグリッド（1キロごと）とマイナーグリッド（0.5キロごと）を設定
-    from matplotlib.ticker import MultipleLocator
-    ax.yaxis.set_major_locator(MultipleLocator(1.0))
-    ax.yaxis.set_minor_locator(MultipleLocator(0.5))
+    # Y軸の数値を非表示にする設定
+    if hide_y_values:
+        ax.set_yticklabels([])
+        ax.set_ylabel("", fontsize=11, fontweight='bold')  # Y軸ラベルも非表示
+    else:
+        # Y軸のメジャーグリッド（1キロごと）とマイナーグリッド（0.5キロごと）を設定
+        from matplotlib.ticker import MultipleLocator
+        ax.yaxis.set_major_locator(MultipleLocator(1.0))
+        ax.yaxis.set_minor_locator(MultipleLocator(0.5))
 
     # グリッド線の設定
     ax.grid(True, which='major', linestyle='-', linewidth=0.8, color='#dee2e6', alpha=0.7)
@@ -331,28 +358,28 @@ if uploaded is not None:
         title = f"体重推移（朝・夜別＋移動平均＋目標）\n期間: {df['datetime'].min().date()} 〜 {df['datetime'].max().date()}"
         fig = plot_metric(df, "体重(kg)", "体重 (kg)", target_weight, start_date, draw_6m, draw_12m, ma_days,
                           y_min=y_min_weight, y_max=y_max_weight,
-                          title=title, x_range_days=x_range_days)
+                          title=title, x_range_days=x_range_days, hide_y_values=hide_y_values, vertical_layout=vertical_layout)
         st.pyplot(fig, clear_figure=True)
     # 体脂肪率
     if "体脂肪(%)" in df.columns:
         y_max_bf = max(df["体脂肪(%)"].max()+1, y_min_bf+1)
         fig = plot_metric(df, "体脂肪(%)", "体脂肪率 (%)", target_bf, start_date, draw_6m, draw_12m, ma_days,
                           y_min=y_min_bf, y_max=y_max_bf,
-                          title="体脂肪率推移（朝・夜別＋移動平均＋目標）", x_range_days=x_range_days)
+                          title="体脂肪率推移（朝・夜別＋移動平均＋目標）", x_range_days=x_range_days, hide_y_values=hide_y_values, vertical_layout=vertical_layout)
         st.pyplot(fig, clear_figure=True)
     # 骨格筋率
     if "骨格筋(%)" in df.columns:
         y_max_skeletal = max(df["骨格筋(%)"].max()+1, y_min_skeletal+1)
         fig = plot_metric(df, "骨格筋(%)", "骨格筋率 (%)", target_skeletal, start_date, draw_6m, draw_12m, ma_days,
                           y_min=y_min_skeletal, y_max=y_max_skeletal,
-                          title="骨格筋率推移（朝・夜別＋移動平均＋目標）", x_range_days=x_range_days)
+                          title="骨格筋率推移（朝・夜別＋移動平均＋目標）", x_range_days=x_range_days, hide_y_values=hide_y_values, vertical_layout=vertical_layout)
         st.pyplot(fig, clear_figure=True)
     # 体脂肪量
     if "体脂肪量(kg)" in df.columns:
         ymin = df["体脂肪量(kg)"].min() - fatmass_margin
         ymax = df["体脂肪量(kg)"].max() + fatmass_margin
         fig = plot_metric(df, "体脂肪量(kg)", "体脂肪量 (kg)", target_fatmass, start_date, draw_6m, draw_12m, ma_days,
-                          y_min=ymin, y_max=ymax, title="体脂肪量推移（朝・夜別＋移動平均＋目標）", x_range_days=x_range_days)
+                          y_min=ymin, y_max=ymax, title="体脂肪量推移（朝・夜別＋移動平均＋目標）", x_range_days=x_range_days, hide_y_values=hide_y_values, vertical_layout=vertical_layout)
         st.pyplot(fig, clear_figure=True)
 else:
     st.info("左の設定を確認し、CSVをアップロードしてください。")
